@@ -1,0 +1,65 @@
+REST interface
+Provide methods for getting and setting application classification information.  Modifiable information is limited to the set of IPv4 addresses and hostnames affiliated with an existing AppID.
+Provide a method for setting application classification information in bulk (i.e. update a set of applications all at once)
+Provide methods for rolling back the pattern definitions to an earlier point in time, in the case of an error
+Secure access to the REST interface 
+
+Pattern updates
+When any SaaS information changes, within a reasonable timeframe, push updated information to the Pattern Aggregator via its REST interface
+
+
+
+
+The S3 bucket will be versioned, keeping a prescribed number of older versions of the app_db.json file.
+These available versions can be listed via the REST API on the Aggregator
+In the event of a 'bad' pattern file, the active pattern URL can be rolled back to point to an older pattern file, via the REST API
+When this occurs, the aggregator enters a 'locked' state.  Application updates are still processed, but new pattern files are not automatically pushed to the S3 bucket.  The aggregator must be 'unlocked' via the REST API.
+This locking provides a window for engineering to investigate the cause of the problem.  Otherwise, when new application updates are received, a pattern file may be pushed that contains the same problem.
+
+
+
+
+On startup, fetch the hashmap app_db.json file from the S3 bucket
+With certain periodicity, check to see if the file has changed on the S3 bucket
+Consult with the ETag property or VersionId property to detect changes without downloading the file
+When changes detected, download new file and update the in-memory classification hashmap
+
+
+
+Dynamic app definitions
+Maintain a table with current application classification information
+Table should be updated with changes received through the REST interface 
+Dynamic changes received through the REST interface should persist across reboots, crashes, and container upgrades
+The Aggregator will create new pattern definition files (app_db.json hashmap contents) that will be available for the individual ACS instances to update themselves
+
+
+The pattern aggregator is a python based package that provides a central point for collecting and distributing updates to the application pattern definitions.
+
+
+
+we design dynamic updates to IP/hostname information for Microsoft SaaS applications, as enumerated here, to facilitate first packet application detection for those SaaS.  SMuRF will be used to monitor SaaS for changes to IP addresses or hostnames.  Changes will be pushed to ACS instances by way of an ACS Pattern Aggregator, to enable being able to answer DNS requests with up-to-date information.
+
+
+
+
+DNS-Request format:<HOSTNAME>.<PORT>.<PROTOCOL>.<IP>.v0.appcs.x.riverbed.cc
+DNS-Response format:2a03:5c60:<REPUTATION>:<APPID>:<CATEGORY> or <ocedo_ipv6ip_prefix>:<Reputation>:<APP_Id>:<category>
+
+
+
+ACS is an Application Control Server. Its an application in the SteelConnect ecosystem that used for the first packet classification for the internet bound traffic.
+ACS provides the ability to detect applications on the first packet - the gateway can query the App Control Server (ACS) for IP addresses it has not seen before and get an application classification for them.
+ACS classifies traffic on two grounds: Application Id, and if that fails the Category ID.
+ACS are the machines in AWS and there are 6(ACS region) of them running in different regions to provide appliances(GWs, CFs, Panthers, SHs, and SHMs) with traffic classification details.
+ACS are containers running on AWS instances.
+
+
+The ACS operates via DNS requests/responses.  The gateway passes all the information necessary for classification by stuffing it into a request for
+
+<HOSTNAME>.<PORT>.<PROTOCOL>.<IP>.v0.appcs.x.riverbed.cc
+
+There is also a .v1 version that obfuscates the 'payload' of the request.  When received by the ACS, it is handled by the dns.pm module, which calls various submodules for performing the classification.  The classification result is stuffed into the DNS response in the form of
+
+2a03:5c60:<REPUTATION>:<APPID>:<CATEGORY>
+
+
